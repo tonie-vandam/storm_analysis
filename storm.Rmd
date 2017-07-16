@@ -1,0 +1,154 @@
+---
+title: "storm_analysis"
+author: "van Dam"
+date: "7/16/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Reproducible Research : Project-2
+
+Analysis to determine which natural hazard causes the most damage to
+people, property, and crops as presented in the NOAA storm database.
+
+Load the data into R
+
+```{r read_data}
+setwd("/Users/tonie.vandam/Downloads/data_science/storm")
+storm <- read.csv("repdata-data-StormData.csv")
+head(storm)
+```
+## Introduction
+
+This analysis focuses only on the health and economic consequences of severe weather events => only a subset of the data are required. According to the document storm_data_info.pdf we need: EVTYPE, FATALITIES, INJURIES, PROPDMG, PROPDMGEXP CROPDMG CROPDMGEXP.  These are the event type, fatalities, injurites, property damage, property damage exponent, crop damage, and crop damage exponent.  
+
+## Data Analysis
+
+```{r subset_data}
+stormSS <- storm[,c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG","CROPDMG")]
+```
+the exponents mean that we multiply the property damage and crop damage by 10 to the exponent.
+EXP can equal h/H, k/K, m/M, b/B that indicate hundreds, thousands, millions, and billions of dollars
+
+Look at the damage and figure out how to assign the exponents to the property and crop damage
+
+```{r}
+unique(storm$PROPDMGEXP)
+```
+Now convert those symbols/numbers into consistent multipliers
+First let's process the property exponential and create a new numeric variable
+
+```{r fix_prop_exp}
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "B"] <- 1e+09
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "M"] <- 1e+06
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "m"] <- 1e+06
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "K"] <- 1e+03
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "h"] <- 1e+02
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "H"] <- 1e+02
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == ""] <- 1
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "0"] <- 1
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "5"] <- 1e+05
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "6"] <- 1e+06
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "4"] <- 1e+04
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "2"] <- 1e+02
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "3"] <- 1e+03
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "7"] <- 1e+07
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "1"] <- 10
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "8"] <- 1e+08
+#invalid exponents assign a value of '0'
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "+"] <- 0
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "-"] <- 0
+stormSS$PDMGMULTIPLY[storm$PROPDMGEXP == "?"] <- 0
+# calculate the property damage value
+stormSS$PROPDMGVAL <- storm$PROPDMG * stormSS$PDMGMULTIPLY
+```
+Now process the crop exponential and create a new numeric variable
+```{r}
+unique(storm$CROPDMGEXP)
+```
+
+```{r fix_crop_exp}
+# Assigning values for the crop exponent data 
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "M"] <- 1e+06
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "K"] <- 1e+03
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "m"] <- 1e+06
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "B"] <- 1e+09
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "0"] <- 1
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "k"] <- 1000
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "2"] <- 100
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == ""] <- 1
+#invalid exponents assign a value of '0'
+stormSS$CDMGMULTIPLY[storm$CROPDMGEXP == "?"] <- 0
+# calculate the crop damage value
+stormSS$CROPDMGVAL <- storm$CROPDMG * stormSS$CDMGMULTIPLY
+str(stormSS)
+```
+Now calculate the totals
+The effect of storms on people are counted in fatalities and injuries.
+
+The effect of storms on the economy are evaluated in property and crop damages.
+
+Then for each event type determine the fatalities, injuries, property damage and crop damage, determine the totals
+
+```{r aggregate}
+# Totalling the data by event
+fatal <- aggregate(FATALITIES ~ EVTYPE, stormSS, FUN = sum)
+injury <- aggregate(INJURIES ~ EVTYPE, stormSS, FUN = sum)
+propdmg <- aggregate(PROPDMGVAL ~ EVTYPE, stormSS, FUN = sum)
+cropdmg <- aggregate(CROPDMGVAL ~ EVTYPE, stormSS, FUN = sum)
+```
+There are a total of 985 events. But if we want to understand what type of event results in the most damage to people, property, and crops, we only need to look at the top events.  Here we choose to look at the top 8.
+
+## Results
+### What are the effects of these natural events on people?
+```{r effects_people}
+fatal_8<-fatal[order(-fatal$FATALITIES), ][1:8, ]
+injury_8<-injury[order(-injury$INJURIES), ][1:8, ]
+fatal_8
+injury_8
+par(mfrow = c(1, 2), mar = c(9, 4, 3, 2))
+barplot(fatal_8$FATALITIES, las = 3, names.arg = fatal_8$EVTYPE, main = "Highest Fatalities by \nEvent", 
+        ylab = "Number of fatalities", col = "light blue")
+barplot(injury_8$INJURIES, las = 3, names.arg = injury_8$EVTYPE, main = "Highest Injuries by \nEvent", 
+        ylab = "Number of injuries", col = "light blue")
+```
+The plots above indicate that the natural events that have the largest impact on people in terms of fatalities, are tornados:  91346 injuries and 5633 deaths over the period investigated.
+
+Now let's look at which natural events cause the most damage to property and crops.
+
+### What are the effects of these natural events on property and crops?
+```{r effects_property}
+prop_8<-propdmg[order(-propdmg$PROPDMGVAL), ][1:8, ]
+crop_8<-cropdmg[order(-cropdmg$CROPDMGVAL), ][1:8, ]
+prop_8
+crop_8
+par(mfrow = c(1, 2), mar = c(11, 4, 3, 2))
+barplot(prop_8$PROPDMGVAL/(10^9), las = 3, names.arg = prop_8$EVTYPE, main = "Highest Property Damage \nby Event", 
+        ylab = "Billions of dollars", col = "light blue")
+barplot(crop_8$CROPDMGVAL/(10^9), las = 3, names.arg = crop_8$EVTYPE, main = "Highest Crop Damage \nby Event", 
+        ylab = "Billions of dollars", col = "light blue")
+```
+
+## Summary
+
+In this project, we analyze the Storm Events Database created by the US NOAA (The National Oceanographic and Atmospheric Administration). The file documents
+
+  The occurrence of storms and other significant weather phenomena having sufficient intensity to cause loss of life, injuries, significant property damage, and/or disruption to commerce;
+
+  Rare, unusual, weather phenomena that generate media attention, such as snow flurries in South Florida or the San Diego coastal area; and
+
+  Other significant meteorological events, such as record maximum or minimum temperatures or precipitation that occur in connection with another event.
+  
+The data cover the years 1950 to 2011.
+
+Using this datase, we were asked to answer the two questions:
+1.	Across the United States, which types of events are most harmful with respect to population health?
+2.	Across the United States, which types of events have the greatest economic consequences?
+
+The first set of histograms show that of all the effect of natural events between 1950 and 2011 causing harm to people, tornados topped the list causing 5633 deaths and 91346 injuries.  After tornados, excessive heat causes the second most deaths with 1903; wind from thunderstorms causes the 2nd most injuries, with 6957. 
+
+The second set of histrograms indicate that changes in the water cycle cause the largest damage to property and crops.  Flooding causes the most damage to property (144 billion dollars) and drought causes the most damage to crops (13 billion dollars).
+
